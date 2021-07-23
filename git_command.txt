@@ -1,0 +1,78 @@
+$ git remote
+Remoteリポジトリ表示
+
+$ git remote -v
+Remoteリポジトリ + URL 表示
+
+$ git branch
+リモート追跡ブランチ以外の Local Branch 確認
+
+$ git branch -a
+全ての Local Branch 確認
+
+$ git branch -r
+Remote Branch 確認
+
+$ git status
+Working tree ファイル状態確認
+
+$ git diff
+addする前に確認。インデックスと作業ツリーの差分　
+WorkTree と Staging の差分コードソース表示
+(コードソース差異なので変更が多いと膨大なログが表示されるため注意)
+
+$ git diff --name-only
+WorkTree と Staging の差分ファイル表示
+殆ど $ git st と同じ内容になる
+--name-only はファイル単位でシンプルに見れるのでオススメ
+
+$ git diff --staged
+addしたあとに確認。HEADとインデックスの差分確認
+Staging と Committing の差異表示
+--cached　も同じ意味
+
+$ git diff HEAD
+HEADと作業ツリーの差分を確認。
+
+$ git diff HEAD~ HEAD
+HEAD~とHEADの差分を確認
+HEAD^ HEADと同じ
+引数1つ目と2つ目は半角スペースでなく..でも使用できる。HEAD~..HEADなど
+
+$ git show
+最新 Commit 内容表示
+
+$ git log
+Commit履歴表示
+
+$git log --graph
+Commit履歴graph表示
+
+$ git add .
+WorkTree ファイルを全て add で Staging
+
+$ git commit -m "commit comment"
+コメントを付けて commit 実行
+
+$ git push origin master
+Remote Repository に Local Repository を反映
+
+$ git pull
+Local WorkTree に Remote Repository を ダイレクト反映
+
+$ git help
+ヘルプページ表示
+
+$ git help -a
+Git全コマンドリスト
+
+$ git config -l
+Repository 設定内容表示
+
+$ git config user.email
+設定 e-mail 表示
+
+$ git config user.name
+設定ユーザー名 表示
+
+
