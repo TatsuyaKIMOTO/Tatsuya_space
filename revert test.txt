@@ -1,2 +1,0 @@
-revert test
-git revert --abort 使えるか
