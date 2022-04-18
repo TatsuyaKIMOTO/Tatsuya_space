@@ -13,7 +13,7 @@ def encrypt(text, shift):
         #AからZの間か？
         if code_a <= code <= code_z:
             #shift文だけ並びをずらす。ずらしたあとにZを超えるとAに戻したいので26で割ったあまりを使用
-            code = (code - code_a + shift) %26 + code_a
+            code = (code - code_a + shift + 26) %26 + code_a
         #文字コードからchr関数を使って文字に戻してfor追記していく。
         result += chr(code)
     return result
