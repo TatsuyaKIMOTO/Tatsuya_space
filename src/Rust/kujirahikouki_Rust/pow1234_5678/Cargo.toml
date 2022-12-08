@@ -1,0 +1,10 @@
+[package]
+name = "pow1234_5678"
+version = "0.1.0"
+edition = "2021"
+
+#依存ライブラリを以下に記述
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+num-bigint = "0.4"
