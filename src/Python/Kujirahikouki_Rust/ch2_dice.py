@@ -1,0 +1,5 @@
+#Pythonでサイコロを5回振るプログラム
+import random
+for i in range(0,5):
+    dice = random.randint(1,6)#randint(min,max)
+    print(dice)
