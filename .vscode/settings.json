@@ -1,5 +1,5 @@
  {
     "rust-analyzer.linkedProjects": [
-      "../src/Rust/kujirahikouki_Rust/hello/Cargo.toml"
+      "src/Rust/kujirahikouki_Rust/hello/Cargo.toml"
     ],   
   }
