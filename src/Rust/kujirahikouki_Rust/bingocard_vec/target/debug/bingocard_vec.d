@@ -1,0 +1,1 @@
+C:\Users\10416\Documents\Git\Tatsuya_space\src\Rust\kujirahikouki_Rust\bingocard_vec\target\debug\bingocard_vec.exe: C:\Users\10416\Documents\Git\Tatsuya_space\src\Rust\kujirahikouki_Rust\bingocard_vec\src\main.rs
