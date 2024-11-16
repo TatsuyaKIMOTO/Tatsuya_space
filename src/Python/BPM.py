@@ -2,7 +2,7 @@
 import librosa
 
 # Specify the path to the MP3 file
-file_path = "D:\\Data\\Downloads\\to me.mp3"  # Specify the path of the MP3 file to analyze
+file_path = "input mp3 file path"  # Specify the path of the MP3 file to analyze
 
 # Load the audio file
 y, sr = librosa.load(file_path, sr=None)  # Retain the original sampling rate
