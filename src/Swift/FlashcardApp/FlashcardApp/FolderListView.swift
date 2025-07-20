@@ -1,4 +1,3 @@
-// FolderListView.swift
 import SwiftUI
 import SwiftData
 
@@ -7,16 +6,17 @@ struct FolderListView: View {
     @Query(sort: \Folder.timestamp, order: .reverse) private var folders: [Folder]
     
     @State private var showingAddFolderView = false
-
+    @State private var errorMessage: String? = nil  // エラー表示用
+    
     var body: some View {
         NavigationStack {
             ZStack {
-                // 背景色を設定
                 Color.appBackground.ignoresSafeArea()
                 
-                // フォルダがない場合の表示
                 if folders.isEmpty {
-                    ContentUnavailableView("フォルダがありません", systemImage: "folder.badge.plus", description: Text("右上の「+」ボタンから新しいフォルダを追加してください。"))
+                    ContentUnavailableView("フォルダがありません",
+                                           systemImage: "folder.badge.plus",
+                                           description: Text("右上の「+」ボタンから新しいフォルダを追加してください。"))
                 } else {
                     List {
                         ForEach(folders) { folder in
@@ -24,71 +24,115 @@ struct FolderListView: View {
                                 HStack(spacing: 15) {
                                     Image(systemName: "folder.fill")
                                         .font(.title)
-                                        .foregroundColor(.accent) // テーマカラーを使用
+                                        .foregroundColor(.accent)
                                     
                                     VStack(alignment: .leading) {
                                         Text(folder.name)
                                             .font(.headline)
+                                        // 修正：非Optionalとして直接アクセス
+                                        Text("作成日時: \(folder.timestamp.formatted(date: .numeric, time: .shortened))")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
                                         Text("カード \(folder.cards?.count ?? 0)枚")
                                             .font(.caption)
                                             .foregroundColor(.secondary)
                                     }
                                 }
                                 .padding(.vertical, 8)
+                                .contentShape(Rectangle()) // タップ領域拡大
                             }
                         }
                         .onDelete(perform: deleteFolders)
-                        // 行の背景色と区切り線を調整
                         .listRowBackground(Color.elementBackground)
                         .listRowSeparator(.hidden)
                     }
-                    .listStyle(.plain) // Listのスタイルを変更して背景色を活かす
+                    .listStyle(.plain)
                 }
             }
             .navigationTitle("マイフォルダ")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: { showingAddFolderView = true }) {
+                    Button {
+                        showingAddFolderView = true
+                    } label: {
                         Image(systemName: "plus.circle.fill")
                             .font(.title2)
                     }
+                    .accessibilityLabel("フォルダ追加")
                 }
                 ToolbarItem(placement: .navigationBarLeading) {
                     if !folders.isEmpty {
                         EditButton()
+                            .accessibilityLabel("編集モード切替")
                     }
                 }
             }
             .sheet(isPresented: $showingAddFolderView) {
-                // この部分で 'AddFolderView' が呼び出されている
-                AddFolderView()
+                AddFolderView { result in
+                    showingAddFolderView = false
+                    switch result {
+                    case .success(let folderName):
+                        addFolder(named: folderName)
+                    case .failure(let error):
+                        errorMessage = error.localizedDescription
+                    }
+                }
+            }
+            .alert("エラー", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(errorMessage ?? "")
             }
         }
     }
-
+    
+    private func addFolder(named name: String) {
+        if folders.contains(where: { $0.name == name }) {
+            errorMessage = "同じ名前のフォルダが既に存在します。"
+            return
+        }
+        let newFolder = Folder(name: name)
+        modelContext.insert(newFolder)
+        do {
+            try modelContext.save()
+        } catch {
+            errorMessage = "フォルダの保存に失敗しました: \(error.localizedDescription)"
+        }
+    }
+    
     private func deleteFolders(offsets: IndexSet) {
         withAnimation {
-            for index in offsets {
-                modelContext.delete(folders[index])
+            offsets.map { folders[$0] }.forEach { modelContext.delete($0) }
+            do {
+                try modelContext.save()
+            } catch {
+                errorMessage = "削除の保存に失敗しました: \(error.localizedDescription)"
             }
         }
     }
 }
 
-// ↓↓↓ ここからが重要です！このコードがファイルに含まれているか確認してください。 ↓↓↓
-
-// フォルダ追加用のビュー
+// 以下 AddFolderView は以前のままで問題ありません
 struct AddFolderView: View {
-    @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     
     @State private var folderName: String = ""
-
+    @State private var errorMessage: String? = nil
+    
+    var onComplete: (Result<String, Error>) -> Void
+    
     var body: some View {
         NavigationStack {
             Form {
                 Section {
                     TextField("フォルダ名", text: $folderName)
+                        .accessibilityLabel("フォルダ名入力")
+                }
+                if let errorMessage {
+                    Section {
+                        Text(errorMessage)
+                            .foregroundColor(.red)
+                    }
                 }
             }
             .navigationTitle("新しいフォルダ")
@@ -101,25 +145,20 @@ struct AddFolderView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") {
-                        addFolder()
+                        if folderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            errorMessage = "フォルダ名を入力してください。"
+                            return
+                        }
+                        onComplete(.success(folderName))
                         dismiss()
                     }
-                    .disabled(folderName.isEmpty)
+                    .disabled(folderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
+            }
+            .onDisappear {
+                folderName = ""
+                errorMessage = nil
             }
         }
     }
-    
-    private func addFolder() {
-        if !folderName.isEmpty {
-            let newFolder = Folder(name: folderName)
-            modelContext.insert(newFolder)
-        }
-    }
-}
-
-// プレビュー用のコード（ビルドエラーとは直接関係ありませんが、含めておきます）
-#Preview {
-    FolderListView()
-        .modelContainer(for: Folder.self, inMemory: true)
 }

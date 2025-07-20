@@ -1,4 +1,3 @@
-// CardListView.swift
 import SwiftUI
 import SwiftData
 
@@ -6,97 +5,165 @@ struct CardListView: View {
     @Environment(\.modelContext) private var modelContext
     @Bindable var folder: Folder
     
-    @State private var selectedCardToEdit: Card?
-    @State private var showingAddCardView = false
-
-    // カードを最新のものが上に来るようにソート
-    private var cards: [Card] {
-        (folder.cards ?? []).sorted(by: { $0.id.uuidString > $1.id.uuidString })
+    @State private var cards: [Card] = []
+    
+    enum ActiveSheet: Identifiable {
+        case add
+        case edit(Card)
+        
+        var id: Int {
+            switch self {
+            case .add: return 0
+            case .edit(let card): return card.id.hashValue
+            }
+        }
     }
-
+    
+    @State private var activeSheet: ActiveSheet?
+    @State private var showDeleteAlert = false
+    @State private var cardToDelete: Card?
+    
     var body: some View {
         ZStack {
-            // 定義したテーマカラーで背景を設定
             Color.appBackground.ignoresSafeArea()
             
-            // カードがない場合の表示
             if cards.isEmpty {
-                ContentUnavailableView("カードがありません", systemImage: "square.on.square.badge.person.crop", description: Text("右上の「+」ボタンから新しい単語カードを追加してください。"))
+                ContentUnavailableView(
+                    "カードがありません",
+                    systemImage: "square.on.square.badge.person.crop",
+                    description: Text("右上の「+」ボタンから新しい単語カードを追加してください。")
+                )
             } else {
-                ScrollView {
-                    VStack(spacing: 12) {
-                        // 学習開始ボタン
-                        NavigationLink(destination: FlashcardView(cards: cards)) {
-                            HStack {
-                                Spacer()
-                                Image(systemName: "play.circle.fill")
-                                Text("学習を開始")
-                                    .fontWeight(.bold)
-                                Spacer()
-                            }
-                            .padding()
-                            .background(Color.accent) // テーマカラーのアクセント色
-                            .foregroundColor(.white)
-                            .cornerRadius(12)
-                            .shadow(color: Color.accent.opacity(0.4), radius: 8, y: 4)
-                        }
-                        .padding([.horizontal, .top])
-                        
-                        // カード一覧
-                        ForEach(cards) { card in
-                            Button(action: { selectedCardToEdit = card }) {
-                                VStack(alignment: .leading, spacing: 5) {
-                                    Text(card.frontText)
-                                        .font(.headline)
-                                        .foregroundColor(.primary) // 自動でLight/Dark対応
-                                    
-                                    Text(card.backMeaning)
-                                        .font(.subheadline)
-                                        .foregroundColor(.secondary) // 自動でLight/Dark対応
-                                        .lineLimit(2)
-                                }
-                                .padding()
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(Color.elementBackground) // テーマカラーの要素背景色
-                                .cornerRadius(12)
-                            }
-                            .padding(.horizontal)
-                            .contextMenu { // 長押しメニュー
-                                Button(action: { selectedCardToEdit = card }) {
-                                    Label("編集", systemImage: "pencil")
-                                }
-                                Button(role: .destructive, action: { deleteCard(card: card) }) {
-                                    Label("削除", systemImage: "trash")
-                                }
-                            }
-                        }
+                CardListContentView(
+                    cards: cards,
+                    onEdit: { activeSheet = .edit($0) },
+                    onDelete: { card in
+                        cardToDelete = card
+                        showDeleteAlert = true
                     }
-                    .padding(.vertical)
-                }
+                )
             }
         }
         .navigationTitle(folder.name)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button(action: { showingAddCardView = true }) {
+                Button {
+                    activeSheet = .add
+                } label: {
                     Label("カードを追加", systemImage: "plus")
                 }
             }
         }
-        .sheet(isPresented: $showingAddCardView) {
-            // 新規追加モードでCardEditViewを開く
-            CardEditView(folder: folder)
+        .sheet(item: $activeSheet, onDismiss: fetchCards) { sheet in
+            switch sheet {
+            case .add:
+                CardEditView(folder: folder)
+            case .edit(let card):
+                CardEditView(cardToEdit: card)
+            }
         }
-        .sheet(item: $selectedCardToEdit) { card in
-            // 編集モードでCardEditViewを開く
-            CardEditView(cardToEdit: card)
+        .alert("本当に削除しますか？", isPresented: $showDeleteAlert) {
+            Button("削除", role: .destructive) {
+                if let card = cardToDelete {
+                    deleteCard(card)
+                }
+            }
+            Button("キャンセル", role: .cancel) {}
+        } message: {
+            Text("削除したカードは元に戻せません。")
+        }
+        .onAppear(perform: fetchCards)
+    }
+    
+    private func fetchCards() {
+        let folderID = folder.id
+        let descriptor = FetchDescriptor<Card>(
+            predicate: #Predicate<Card> { $0.folder?.id == folderID },
+            sortBy: [SortDescriptor(\.id)]
+        )
+        do {
+            cards = try modelContext.fetch(descriptor)
+        } catch {
+            print("カードの取得に失敗しました: \(error.localizedDescription)")
+            cards = []
         }
     }
-
-    // カードを削除する関数
-    private func deleteCard(card: Card) {
+    
+    private func deleteCard(_ card: Card) {
         withAnimation {
             modelContext.delete(card)
+            fetchCards()
+        }
+    }
+}
+
+struct CardListContentView: View {
+    let cards: [Card]
+    let onEdit: (Card) -> Void
+    let onDelete: (Card) -> Void
+    
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 12) {
+                NavigationLink(destination: FlashcardView(cards: cards)) {
+                    HStack {
+                        Spacer()
+                        Image(systemName: "play.circle.fill")
+                        Text("学習を開始")
+                            .fontWeight(.bold)
+                        Spacer()
+                    }
+                    .padding()
+                    .background(Color.accent)
+                    .foregroundColor(.white)
+                    .cornerRadius(12)
+                    .shadow(color: Color.accent.opacity(0.4), radius: 8, y: 4)
+                }
+                .padding([.horizontal, .top])
+                
+                ForEach(cards) { card in
+                    CardRowView(card: card, onEdit: onEdit, onDelete: onDelete)
+                }
+            }
+            .padding(.vertical)
+        }
+    }
+}
+
+struct CardRowView: View {
+    let card: Card
+    let onEdit: (Card) -> Void
+    let onDelete: (Card) -> Void
+    
+    var body: some View {
+        Button(action: { onEdit(card) }) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(card.frontText)
+                    .font(.headline)
+                    .foregroundColor(.primary)
+                Text(card.backMeaning)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .lineLimit(2)
+            }
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.elementBackground)
+            .cornerRadius(12)
+        }
+        .padding(.horizontal)
+        .accessibilityLabel("\(card.frontText), 意味: \(card.backMeaning)")
+        .contextMenu {
+            Button {
+                onEdit(card)
+            } label: {
+                Label("編集", systemImage: "pencil")
+            }
+            Button(role: .destructive) {
+                onDelete(card)
+            } label: {
+                Label("削除", systemImage: "trash")
+            }
         }
     }
 }
