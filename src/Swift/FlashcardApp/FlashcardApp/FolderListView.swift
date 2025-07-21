@@ -1,163 +1,156 @@
+// FolderListView.swift
 import SwiftUI
 import SwiftData
 
 struct FolderListView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \Folder.timestamp, order: .reverse) private var folders: [Folder]
+    @Environment(\.editMode) private var editMode
     
-    @State private var showingAddFolderView = false
-    @State private var errorMessage: String? = nil  // エラー表示用
+    // @Queryではソートを行わず、全件取得に専念します。
+    @Query private var allFolders: [Folder]
     
+    @State private var showingAddSheet = false
+    @State private var folderToEdit: Folder?
+    @State private var searchText = ""
+
+    // ソートとフィルタリングをコードで手動で行う算出プロパティです。
+    // これにより、コンパイラのエラーを確実に回避します。
+    private var sortedAndFilteredFolders: [Folder] {
+        // 先にソート処理
+        let sorted = allFolders.sorted { folder1, folder2 in
+            // ルール1: ピン留めの状態が違うなら、ピン留めされた方を常に前にする
+            if folder1.isPinned != folder2.isPinned {
+                return folder1.isPinned
+            }
+            // ルール2: ピン留めの状態が同じなら、orderIndexが小さい方を前にする
+            return folder1.orderIndex < folder2.orderIndex
+        }
+        
+        // 次に検索フィルタを適用
+        if searchText.isEmpty {
+            return sorted
+        } else {
+            return sorted.filter { $0.name.localizedStandardContains(searchText) }
+        }
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
                 Color.appBackground.ignoresSafeArea()
-                
-                if folders.isEmpty {
-                    ContentUnavailableView("フォルダがありません",
-                                           systemImage: "folder.badge.plus",
-                                           description: Text("右上の「+」ボタンから新しいフォルダを追加してください。"))
+                if allFolders.isEmpty {
+                    ContentUnavailableView("フォルダがありません", systemImage: "folder.badge.plus", description: Text("右上の「+」ボタンから新しいフォルダを追加してください。"))
                 } else {
                     List {
-                        ForEach(folders) { folder in
+                        // 表示するデータを、手動でソート・フィルタした新しい配列に変更します。
+                        ForEach(sortedAndFilteredFolders) { folder in
                             NavigationLink(destination: CardListView(folder: folder)) {
-                                HStack(spacing: 15) {
-                                    Image(systemName: "folder.fill")
-                                        .font(.title)
-                                        .foregroundColor(.accent)
-                                    
-                                    VStack(alignment: .leading) {
-                                        Text(folder.name)
-                                            .font(.headline)
-                                        // 修正：非Optionalとして直接アクセス
-                                        Text("作成日時: \(folder.timestamp.formatted(date: .numeric, time: .shortened))")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                        Text("カード \(folder.cards?.count ?? 0)枚")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                }
-                                .padding(.vertical, 8)
-                                .contentShape(Rectangle()) // タップ領域拡大
+                                folderRow(for: folder)
                             }
+                            .contextMenu { contextMenuItems(for: folder) }
                         }
-                        .onDelete(perform: deleteFolders)
+                        .onDelete(perform: deleteFoldersWithOffsets)
+                        .onMove(perform: moveFolder)
                         .listRowBackground(Color.elementBackground)
                         .listRowSeparator(.hidden)
                     }
                     .listStyle(.plain)
+                    .animation(.default, value: sortedAndFilteredFolders)
+                    .environment(\.editMode, editMode)
                 }
             }
             .navigationTitle("マイフォルダ")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        showingAddFolderView = true
-                    } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.title2)
-                    }
-                    .accessibilityLabel("フォルダ追加")
-                }
-                ToolbarItem(placement: .navigationBarLeading) {
-                    if !folders.isEmpty {
-                        EditButton()
-                            .accessibilityLabel("編集モード切替")
-                    }
-                }
-            }
-            .sheet(isPresented: $showingAddFolderView) {
-                AddFolderView { result in
-                    showingAddFolderView = false
-                    switch result {
-                    case .success(let folderName):
-                        addFolder(named: folderName)
-                    case .failure(let error):
-                        errorMessage = error.localizedDescription
-                    }
-                }
-            }
-            .alert("エラー", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
-                Button("OK", role: .cancel) { }
-            } message: {
-                Text(errorMessage ?? "")
-            }
+            .toolbar { toolbarItems() }
+            .sheet(isPresented: $showingAddSheet) { AddFolderView(currentFolderCount: allFolders.count) }
+            .sheet(item: $folderToEdit) { folder in AddFolderView(folderToEdit: folder) }
+            .searchable(text: $searchText, prompt: "フォルダを検索")
         }
     }
-    
-    private func addFolder(named name: String) {
-        if folders.contains(where: { $0.name == name }) {
-            errorMessage = "同じ名前のフォルダが既に存在します。"
-            return
-        }
-        let newFolder = Folder(name: name)
-        modelContext.insert(newFolder)
-        do {
-            try modelContext.save()
-        } catch {
-            errorMessage = "フォルダの保存に失敗しました: \(error.localizedDescription)"
-        }
-    }
-    
-    private func deleteFolders(offsets: IndexSet) {
-        withAnimation {
-            offsets.map { folders[$0] }.forEach { modelContext.delete($0) }
-            do {
-                try modelContext.save()
-            } catch {
-                errorMessage = "削除の保存に失敗しました: \(error.localizedDescription)"
-            }
-        }
-    }
-}
 
-// 以下 AddFolderView は以前のままで問題ありません
-struct AddFolderView: View {
-    @Environment(\.dismiss) private var dismiss
-    
-    @State private var folderName: String = ""
-    @State private var errorMessage: String? = nil
-    
-    var onComplete: (Result<String, Error>) -> Void
-    
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    TextField("フォルダ名", text: $folderName)
-                        .accessibilityLabel("フォルダ名入力")
-                }
-                if let errorMessage {
-                    Section {
-                        Text(errorMessage)
-                            .foregroundColor(.red)
-                    }
-                }
+    // MARK: - Subviews (省略せずに完全に記述)
+
+    private func folderRow(for folder: Folder) -> some View {
+        HStack(spacing: 15) {
+            Image(systemName: "folder.fill").font(.title).foregroundColor(.accent)
+            VStack(alignment: .leading) {
+                Text(folder.name).font(.headline)
+                Text("カード \(folder.cards?.count ?? 0)枚").font(.caption).foregroundColor(.secondary)
             }
-            .navigationTitle("新しいフォルダ")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("キャンセル") {
-                        dismiss()
-                    }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") {
-                        if folderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            errorMessage = "フォルダ名を入力してください。"
-                            return
-                        }
-                        onComplete(.success(folderName))
-                        dismiss()
-                    }
-                    .disabled(folderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
+            Spacer()
+            if folder.isPinned {
+                Image(systemName: "pin.fill").foregroundColor(.secondary).font(.caption)
             }
-            .onDisappear {
-                folderName = ""
-                errorMessage = nil
+        }
+        .padding(.vertical, 8)
+    }
+
+    @ViewBuilder
+    private func contextMenuItems(for folder: Folder) -> some View {
+        if editMode?.wrappedValue.isEditing == false {
+            Button { folderToEdit = folder } label: { Label("名前を変更", systemImage: "pencil") }
+            Button { togglePin(for: folder) } label: { Label(folder.isPinned ? "ピンを外す" : "ピン留め", systemImage: folder.isPinned ? "pin.slash.fill" : "pin.fill") }
+            Divider()
+            Button(role: .destructive) { deleteFolder(folder: folder) } label: { Label("削除", systemImage: "trash") }
+        }
+    }
+    
+    @ToolbarContentBuilder
+    private func toolbarItems() -> some ToolbarContent {
+        ToolbarItem(placement: .navigationBarTrailing) {
+            Button {
+                folderToEdit = nil
+                showingAddSheet = true
+            } label: { Image(systemName: "plus.circle.fill").font(.title2) }
+        }
+        ToolbarItem(placement: .navigationBarLeading) {
+            if !allFolders.isEmpty { EditButton() }
+        }
+    }
+
+    // MARK: - Functions (省略せずに完全に記述)
+
+    private func deleteFoldersWithOffsets(offsets: IndexSet) {
+        withAnimation {
+            let foldersToDelete = offsets.map { sortedAndFilteredFolders[$0] }
+            for folder in foldersToDelete {
+                modelContext.delete(folder)
+            }
+            updateOrderIndexes()
+        }
+    }
+    
+    private func deleteFolder(folder: Folder) {
+        withAnimation {
+            modelContext.delete(folder)
+            updateOrderIndexes()
+        }
+    }
+    
+    private func moveFolder(from source: IndexSet, to destination: Int) {
+        guard searchText.isEmpty else { return }
+        
+        var reorderedFolders = allFolders.sorted { f1, f2 in
+            if f1.isPinned != f2.isPinned { return f1.isPinned }
+            return f1.orderIndex < f2.orderIndex
+        }
+        reorderedFolders.move(fromOffsets: source, toOffset: destination)
+        
+        updateOrderIndexes(for: reorderedFolders)
+    }
+    
+    private func togglePin(for folder: Folder) {
+        withAnimation { folder.isPinned.toggle() }
+    }
+    
+    private func updateOrderIndexes(for updatedList: [Folder]? = nil) {
+        let listToUpdate = updatedList ?? allFolders.sorted { f1, f2 in
+            if f1.isPinned != f2.isPinned { return f1.isPinned }
+            return f1.orderIndex < f2.orderIndex
+        }
+        
+        for (index, folder) in listToUpdate.enumerated() {
+            if folder.orderIndex != index {
+                folder.orderIndex = index
             }
         }
     }

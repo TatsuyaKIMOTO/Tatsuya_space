@@ -2,35 +2,36 @@
 import Foundation
 import SwiftData
 
-// フォルダのデータモデル
 @Model
 final class Folder {
     var id: UUID
     var name: String
     var timestamp: Date
+    var isPinned: Bool
+    var orderIndex: Int
 
-    // フォルダが削除されたら、中のカードも一緒に削除される設定 (cascade)
     @Relationship(deleteRule: .cascade, inverse: \Card.folder)
-    var cards: [Card]? // このフォルダに属するカードのリスト
+    var cards: [Card]?
 
-    init(name: String) {
+    init(name: String, orderIndex: Int) {
         self.id = UUID()
         self.name = name
         self.timestamp = Date()
+        self.isPinned = false
+        self.orderIndex = orderIndex
     }
 }
 
-// 単語カードのデータモデル
+// Cardモデルは変更なし
 @Model
 final class Card {
     var id: UUID
-    var frontText: String       // 表面: 単語
-    var backMeaning: String     // 裏面: 意味
-    var backEtymology: String   // 裏面: 語源
-    var backExample: String     // 裏面: 例文
-    var backExampleJP: String   // 裏面: 例文の日本語訳
-
-    var folder: Folder? // このカードが属するフォルダ
+    var frontText: String
+    var backMeaning: String
+    var backEtymology: String
+    var backExample: String
+    var backExampleJP: String
+    var folder: Folder?
 
     init(frontText: String, backMeaning: String, backEtymology: String, backExample: String, backExampleJP: String) {
         self.id = UUID()
