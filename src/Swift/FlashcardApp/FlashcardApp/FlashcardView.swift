@@ -1,104 +1,116 @@
-// FlashcardView.swift
 import SwiftUI
 
 struct FlashcardView: View {
-    // 受け取った元のカード配列
     let originalCards: [Card]
-    
-    // 現在表示しているシャッフル済みのカード配列
+
     @State private var activeCards: [Card] = []
-    
     @State private var currentIndex = 0
     @State private var isFlipped = false
     @State private var cardRotation = 0.0
-    
-    // コンストラクタをカスタムして、受け取ったcardsをシャッフルしてactiveCardsにセット
+
     init(cards: [Card]) {
         self.originalCards = cards
-        // _activeCardsの初期値を設定する
         _activeCards = State(initialValue: cards.shuffled())
     }
 
     var body: some View {
-        VStack(spacing: 20) {
-            if !activeCards.isEmpty {
-                // プログレスバー
-                ProgressView(value: Double(currentIndex + 1), total: Double(activeCards.count))
+        ZStack {
+            VStack(spacing: 20) {
+                if !activeCards.isEmpty {
+                    ProgressView(value: Double(currentIndex + 1), total: Double(activeCards.count))
+                        .progressViewStyle(LinearProgressViewStyle(tint: Color.accentColor))
+                        .padding(.horizontal)
+                        .accessibilityLabel("進捗")
+                        .accessibilityValue("\(currentIndex + 1) / \(activeCards.count)")
+
+                    Text("カード \(currentIndex + 1) / \(activeCards.count)")
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
+                        .accessibilityHidden(true)
+
+                    Spacer()
+
+                    ZStack {
+                        if isFlipped {
+                            CardFace(card: activeCards[currentIndex], isFront: false)
+                                .accessibilityLabel("カードの裏面")
+                                .accessibilityHint("タップでカードの表面に戻ります")
+                        } else {
+                            CardFace(card: activeCards[currentIndex], isFront: true)
+                                .accessibilityLabel("カードの表面")
+                                .accessibilityHint("タップでカードの裏面を表示します")
+                        }
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 420)
                     .padding(.horizontal)
-                
-                Text("カード \(currentIndex + 1) / \(activeCards.count)")
-                    .font(.subheadline)
-                    .foregroundColor(.gray)
-
-                Spacer()
-
-                // フラッシュカード本体
-                ZStack {
-                    // isFlippedがtrueなら裏面、falseなら表面を表示
-                    if isFlipped {
-                        CardFace(card: activeCards[currentIndex], isFront: false)
-                    } else {
-                        CardFace(card: activeCards[currentIndex], isFront: true)
+                    .rotation3DEffect(.degrees(cardRotation), axis: (x: 0, y: 1, z: 0))
+                    .onTapGesture {
+                        flipCard()
                     }
-                }
-                .rotation3DEffect(.degrees(cardRotation), axis: (x: 0, y: 1, z: 0))
-                .onTapGesture {
-                    flipCard()
-                }
-                
-                Spacer()
-
-                // ナビゲーションボタン
-                HStack(spacing: 20) {
-                    // 戻るボタン
-                    Button(action: showPreviousCard) {
-                        Image(systemName: "arrow.left.circle.fill")
-                            .font(.largeTitle)
-                    }
-                    .disabled(currentIndex == 0)
 
                     Spacer()
-                    
-                    // シャッフルボタン
-                    Button(action: shuffleCards) {
-                        Label("シャッフル", systemImage: "shuffle.circle.fill")
-                            .font(.title)
-                    }
-                    
-                    Spacer()
 
-                    // 次へボタン
-                    Button(action: showNextCard) {
-                        Image(systemName: "arrow.right.circle.fill")
-                            .font(.largeTitle)
+                    HStack(spacing: 20) {
+                        Button(action: showPreviousCard) {
+                            Image(systemName: "arrow.left.circle.fill")
+                                .font(.largeTitle)
+                        }
+                        .disabled(currentIndex == 0)
+                        .accessibilityLabel("前のカード")
+
+                        Spacer()
+
+                        Button(action: shuffleCards) {
+                            Label("シャッフル", systemImage: "shuffle.circle.fill")
+                                .font(.title)
+                        }
+                        .accessibilityHint("カードをシャッフルします")
+
+                        Spacer()
+
+                        Button(action: showNextCard) {
+                            Image(systemName: "arrow.right.circle.fill")
+                                .font(.largeTitle)
+                        }
+                        .disabled(currentIndex == activeCards.count - 1)
+                        .accessibilityLabel("次のカード")
                     }
-                    .disabled(currentIndex == activeCards.count - 1)
+                    .padding()
+                } else {
+                    Text("学習できるカードがありません。")
                 }
-                .padding()
-            } else {
-                Text("学習できるカードがありません。")
             }
+            .padding(.top)
         }
+        .gesture(
+            DragGesture()
+                .onEnded { value in
+                    let horizontalAmount = value.translation.width
+                    let threshold: CGFloat = 50
+
+                    if horizontalAmount < -threshold {
+                        showNextCard()
+                    } else if horizontalAmount > threshold {
+                        showPreviousCard()
+                    }
+                }
+        )
         .navigationTitle("学習")
         .navigationBarTitleDisplayMode(.inline)
-        // ビューが表示されたときに呼ばれる
         .onAppear {
-            // もし何らかの理由でactiveCardsが空なら再シャッフル
             if activeCards.isEmpty {
                 activeCards = originalCards.shuffled()
             }
         }
     }
-    
-    // カードをめくるアニメーション
+
     func flipCard() {
         isFlipped.toggle()
         withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) {
-            cardRotation += 180
+            cardRotation = isFlipped ? 180 : 0
         }
     }
 
-    // 次のカードへ
     func showNextCard() {
         if currentIndex < activeCards.count - 1 {
             currentIndex += 1
@@ -106,15 +118,13 @@ struct FlashcardView: View {
         }
     }
 
-    // 前のカードへ
     func showPreviousCard() {
         if currentIndex > 0 {
             currentIndex -= 1
             resetCardState()
         }
     }
-    
-    // カードをシャッフルする
+
     func shuffleCards() {
         withAnimation {
             activeCards.shuffle()
@@ -122,100 +132,110 @@ struct FlashcardView: View {
             resetCardState()
         }
     }
-    
-    // カードの状態をリセット（表面に戻す）
+
     func resetCardState() {
         if isFlipped {
             isFlipped = false
-            cardRotation += 180 // アニメーションなしで角度を戻す
+            cardRotation = 0
         }
     }
 }
 
-// ↓↓↓ ここから下が重要です！このコードがファイルに含まれているか確認してください。 ↓↓↓
-
-// FlashcardView.swift
-// FlashcardViewのstruct自体は変更なし。
-// 下部にあるCardFaceとInfoRowを以下のように書き換えます。
-
-// カードの表面・裏面を定義するビュー
 struct CardFace: View {
     let card: Card
     let isFront: Bool
-    
+
     var body: some View {
+        Group {
+            if isFront {
+                frontBody
+            } else {
+                backBody
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 420)
+        .background(
+            LinearGradient(
+                            gradient: Gradient(colors: [
+                                Color.purple.opacity(0.8),
+                                Color.blue.opacity(0.8),
+                                Color.indigo.opacity(0.8)
+                            ]),
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .cornerRadius(24)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 24)
+                            .stroke(Color.white.opacity(0.4), lineWidth: 1)
+                    )
+                    .shadow(color: Color.black.opacity(0.3), radius: 12, x: 0, y: 8)
+                    .padding(.horizontal)
+    }
+
+    private var frontBody: some View {
+        VStack {
+            Spacer(minLength: 120)
+            Text(card.frontText)
+                .font(.system(size: 44, weight: .heavy, design: .rounded))
+                .foregroundColor(.white)
+                .multilineTextAlignment(.center)
+                .minimumScaleFactor(0.4)
+                .padding(.horizontal)
+            Spacer(minLength: 120)
+        }
+    }
+
+    private var backBody: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                if isFront {
-                    Spacer(minLength: 100)
-                    Text(card.frontText)
-                        .font(.system(size: 40, weight: .bold, design: .rounded))
-                        .foregroundColor(.primary)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .minimumScaleFactor(0.5)
-                    Spacer(minLength: 100)
-                } else {
-                    // 裏面のレイアウト
-                    VStack(alignment: .leading, spacing: 18) {
-                        InfoRow(label: "意味", content: card.backMeaning)
-                        
-                        if !card.backEtymology.isEmpty {
-                            Divider()
-                            InfoRow(label: "語源", content: card.backEtymology)
-                        }
-                        
-                        if !card.backExample.isEmpty || !card.backExampleJP.isEmpty {
-                            Divider()
-                            InfoRow(label: "例文", content: card.backExample)
-                            InfoRow(label: "日本語訳", content: card.backExampleJP)
-                        }
+                if !card.backMeaning.isEmpty {
+                    InfoRow(label: "意味", content: card.backMeaning)
+                }
+                if !card.backEtymology.isEmpty {
+                    Divider()
+                    InfoRow(label: "語源", content: card.backEtymology)
+                }
+                if !card.backExample.isEmpty || !card.backExampleJP.isEmpty {
+                    Divider()
+                    if !card.backExample.isEmpty {
+                        InfoRow(label: "例文", content: card.backExample)
                     }
-                    .rotation3DEffect(.degrees(180), axis: (x: 0, y: 1, z: 0))
+                    if !card.backExampleJP.isEmpty {
+                        InfoRow(label: "日本語訳", content: card.backExampleJP)
+                    }
                 }
             }
-            .padding(30)
+            .padding(36)
+            .foregroundColor(.white)
         }
-        .frame(maxWidth: .infinity, minHeight: 400)
-        // ★★★ ダークモード対応の核心部分 ★★★
-        .background(Color.elementBackground)
-        .cornerRadius(20)
-        // 影をよりソフトに
-        .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 5)
-        .overlay(
-            // 表面であることを示すインジケーター
-            VStack {
-                if isFront {
-                    HStack {
-                        Spacer()
-                        Image(systemName: "arrow.2.circlepath")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .padding()
-                    }
-                }
-                Spacer()
-            }
-        )
-        .padding(.horizontal)
+        .rotation3DEffect(.degrees(180), axis: (x: 0, y: 1, z: 0))
     }
 }
 
-// 裏面の情報表示用のヘルパービュー
 struct InfoRow: View {
     let label: String
     let content: String
-    
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label)
-                .font(.caption)
-                .fontWeight(.bold)
-                .foregroundColor(.secondary) // .secondaryで自動的に色が調整される
-            
-            Text(content)
-                .font(.body)
-                .foregroundColor(.primary) // .primaryで自動的に色が調整される
-                .frame(maxWidth: .infinity, alignment: .leading)
+        if content.isEmpty {
+            EmptyView()
+        } else {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(label)
+                    .font(.caption)
+                    .fontWeight(.bold)
+                    .foregroundColor(.white.opacity(0.8))
+                Text(content)
+                    .font(.title3)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
     }
+}
+
+extension Color {
+    static let cardBackground = Color("elementBackground")
 }
