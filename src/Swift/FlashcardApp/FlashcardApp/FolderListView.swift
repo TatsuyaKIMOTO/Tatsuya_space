@@ -26,42 +26,31 @@ struct FolderListView: View {
         }
     }
 
-    private var searchResults: [Folder] {
+    // A separate query for cards for the search functionality.
+    @Query(sort: \Card.creationDate, order: .reverse) private var allCards: [Card]
+    
+    // Computed property for card search results.
+    private var cardSearchResults: [Card] {
         if searchText.isEmpty {
-            return sortedFolders
-        } else {
-            return sortedFolders.filter { folder in
-                folder.name.localizedStandardContains(searchText) ||
-                (folder.cards?.contains(where: { card in
-                    card.frontText.localizedStandardContains(searchText)
-                }) ?? false)
-            }
+            return []
+        }
+        return allCards.filter {
+            $0.frontText.localizedStandardContains(searchText)
         }
     }
+
 
     var body: some View {
         NavigationStack {
             ZStack {
                 Color.appBackground.ignoresSafeArea()
                 
-                if folders.isEmpty && searchText.isEmpty {
-                    ContentUnavailableView("フォルダがありません", systemImage: "folder.badge.plus", description: Text("右上の「+」ボタンから新しいフォルダを追加してください。"))
+                // If a search is active, show the card results list.
+                if !searchText.isEmpty {
+                    cardSearchResultsView
                 } else {
-                    List {
-                        ForEach(searchResults) { folder in
-                            FolderRow(
-                                folder: folder,
-                                onEdit: { self.folderToEdit = folder },
-                                onPin: { self.togglePin(for: folder) },
-                                onDelete: { self.deleteFolder(folder) }
-                            )
-                        }
-                        .onDelete(perform: deleteFoldersWithOffsets)
-                        .onMove(perform: moveFolder)
-                        .listRowBackground(Color.elementBackground)
-                        .listRowSeparator(.hidden)
-                    }
-                    .listStyle(.plain)
+                    // If no search is active, show the folder list.
+                    folderListView
                 }
             }
             .navigationTitle("マイフォルダ")
@@ -71,19 +60,65 @@ struct FolderListView: View {
             .searchable(text: $searchText, prompt: "フォルダやカードを検索")
         }
     }
+    
+    // MARK: - Subviews
+
+    @ViewBuilder
+    private var folderListView: some View {
+        if folders.isEmpty {
+            ContentUnavailableView("フォルダがありません", systemImage: "folder.badge.plus", description: Text("右上の「+」ボタンから新しいフォルダを追加してください。"))
+        } else {
+            List {
+                ForEach(sortedFolders) { folder in
+                    FolderRow(
+                        folder: folder,
+                        onEdit: { self.folderToEdit = folder },
+                        onPin: { self.togglePin(for: folder) },
+                        onDelete: { self.deleteFolder(folder) }
+                    )
+                }
+                .onDelete(perform: deleteFoldersWithOffsets)
+                .onMove(perform: moveFolder)
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+            }
+            .listStyle(.plain)
+        }
+    }
+    
+    @ViewBuilder
+    private var cardSearchResultsView: some View {
+        if cardSearchResults.isEmpty {
+            ContentUnavailableView("見つかりませんでした", systemImage: "magnifyingglass", description: Text(" \"\(searchText)\" に一致するカードはありません。"))
+        } else {
+            List {
+                ForEach(cardSearchResults) { card in
+                    // Navigate to the CardListView for the card's folder
+                    if let folder = card.folder {
+                        NavigationLink(destination: CardListView(folder: folder)) {
+                            CardSearchResultRow(card: card)
+                        }
+                    }
+                }
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+            }
+            .listStyle(.plain)
+        }
+    }
+
 
     // MARK: - Toolbar & Functions
     
     @ToolbarContentBuilder
     private func toolbarItems() -> some ToolbarContent {
         ToolbarItem(placement: .navigationBarLeading) {
-            if !folders.isEmpty {
+            if !folders.isEmpty && searchText.isEmpty {
                 EditButton()
             }
         }
         ToolbarItem(placement: .navigationBarTrailing) {
             Button {
-                self.folderToEdit = nil
                 self.showingAddSheet = true
             } label: { Image(systemName: "plus") }
         }
@@ -91,7 +126,7 @@ struct FolderListView: View {
     
     private func deleteFoldersWithOffsets(offsets: IndexSet) {
         withAnimation {
-            let foldersToDelete = offsets.map { self.searchResults[$0] }
+            let foldersToDelete = offsets.map { self.sortedFolders[$0] }
             for folder in foldersToDelete { self.modelContext.delete(folder) }
             self.updateOrderIndexes()
         }
@@ -106,7 +141,7 @@ struct FolderListView: View {
     
     private func moveFolder(from source: IndexSet, to destination: Int) {
         guard self.searchText.isEmpty else { return }
-        var reorderedFolders = self.searchResults
+        var reorderedFolders = self.sortedFolders
         reorderedFolders.move(fromOffsets: source, toOffset: destination)
         self.updateOrderIndexes(for: reorderedFolders)
     }
@@ -127,7 +162,7 @@ struct FolderListView: View {
 }
 
 
-// MARK: - FolderRow (No Changes)
+// MARK: - FolderRow
 
 private struct FolderRow: View {
     @Environment(\.editMode) private var editMode
@@ -198,32 +233,43 @@ private struct FolderRow: View {
     }
 }
 
+// MARK: - CardSearchResultRow
 
-// MARK: - Preview (No Changes)
+private struct CardSearchResultRow: View {
+    let card: Card
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(card.frontText)
+                .font(.title3.bold())
+                .foregroundColor(.primary)
+            
+            Text(card.backMeaning)
+                .font(.body)
+                .foregroundColor(.secondary)
+                .lineLimit(2)
+            
+            if let folderName = card.folder?.name {
+                HStack {
+                    Image(systemName: "folder.fill")
+                    Text(folderName)
+                }
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .padding(.top, 4)
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.elementBackground)
+        .cornerRadius(12)
+    }
+}
+
+
+// MARK: - Preview
 
 #Preview {
-    do {
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: Folder.self, configurations: config)
-        
-        let folder1 = Folder(name: "TOEIC Words", orderIndex: 0)
-        let card1 = Card(frontText: "Apple", backMeaning: "りんご", backEtymology: "", backExample: "", backExampleJP: "")
-        card1.folder = folder1
-        
-        let folder2 = Folder(name: "Phrases", orderIndex: 1)
-        folder2.isPinned = true
-        let card2 = Card(frontText: "Banana", backMeaning: "バナナ", backEtymology: "", backExample: "", backExampleJP: "")
-        card2.folder = folder2
-
-        container.mainContext.insert(folder1)
-        container.mainContext.insert(card1)
-        container.mainContext.insert(folder2)
-        container.mainContext.insert(card2)
-        
-        return FolderListView()
-            .modelContainer(container)
-        
-    } catch {
-        return Text("Preview Error: \(error.localizedDescription)")
-    }
+    FolderListView()
+        .modelContainer(for: [Folder.self, Card.self], inMemory: true)
 }
