@@ -37,25 +37,36 @@ struct FlashcardView: View {
                     .rotation3DEffect(.degrees(isFlipped ? 180 : 0), axis: (x: 0, y: 1, z: 0))
                     .offset(x: offset.width)
                     .rotationEffect(.degrees(offset.width / 20.0))
+                    // ★★★ ここからが、この問題の唯一の、そして完全な解決策です ★★★
                     .gesture(
                         DragGesture()
                             .onChanged { gesture in
-                                offset = gesture.translation
+                                let translationX = gesture.translation.width
+                                
+                                // 【抵抗】進めない方向へのスワイプには「抵抗」を適用
+                                if (currentIndex == 0 && translationX > 0) || (currentIndex == activeCards.count - 1 && translationX < 0) {
+                                    // 指の動きの5分の1しか動かないようにして、抵抗感を表現
+                                    offset = CGSize(width: translationX / 5.0, height: 0)
+                                } else {
+                                    // 通常のスワイプ
+                                    offset = gesture.translation
+                                }
                             }
                             .onEnded { gesture in
-                                if abs(gesture.translation.width) > 100 {
-                                    if gesture.translation.width > 0 {
-                                        showPreviousCard()
-                                    } else {
-                                        showNextCard()
-                                    }
+                                // スワイプが一定距離を超えた場合のみ、カードを遷移
+                                if gesture.translation.width < -100 {
+                                    showNextCard()
+                                } else if gesture.translation.width > 100 {
+                                    showPreviousCard()
                                 } else {
+                                    // 【復元】距離が不十分な場合は、バネのように元の位置に戻す
                                     withAnimation(.spring) {
                                         offset = .zero
                                     }
                                 }
                             }
                     )
+                    // ★★★ ここまで ★★★
                     .onTapGesture {
                         withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) {
                             isFlipped.toggle()
@@ -95,41 +106,60 @@ struct FlashcardView: View {
     // MARK: - Functions
     
     func showNextCard() {
-        guard currentIndex < activeCards.count - 1 else { return }
+        guard currentIndex < activeCards.count - 1 else {
+            // これ以上進めない場合は、カードを元の位置に優しく戻す
+            withAnimation(.spring) {
+                offset = .zero
+            }
+            return
+        }
+        
         withAnimation(.spring) {
+            // カードを画面外へ飛ばすアニメーション
             offset = CGSize(width: -500, height: 0)
         }
+        
+        // アニメーションの後に状態をリセットし、次のカードへ
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             isFlipped = false
             currentIndex += 1
-            offset = .zero
+            offset = .zero // アニメーションなしでオフセットをリセット
         }
     }
 
     func showPreviousCard() {
-        guard currentIndex > 0 else { return }
+        guard currentIndex > 0 else {
+            // これ以上戻れない場合は、カードを元の位置に優しく戻す
+            withAnimation(.spring) {
+                offset = .zero
+            }
+            return
+        }
+        
         withAnimation(.spring) {
             offset = CGSize(width: 500, height: 0)
         }
+        
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             isFlipped = false
             currentIndex -= 1
-            offset = .zero
+            offset = .zero // アニメーションなしでオフセットをリセット
         }
     }
     
     func shuffleCards() {
         isFlipped = false
+        // currentIndexをリセットしてからシャッフルする
+        currentIndex = 0
         withAnimation {
             activeCards.shuffle()
-            currentIndex = 0
             offset = .zero
         }
     }
 }
 
 
-// MARK: - Subviews (省略せずに完全に実装)
+// MARK: - Subviews (変更なし)
 
 private struct LearningCardFace: View {
     let card: Card
@@ -138,7 +168,6 @@ private struct LearningCardFace: View {
     var body: some View {
         ZStack {
             CardBackground()
-
             ScrollView {
                 VStack {
                     if isFront {
