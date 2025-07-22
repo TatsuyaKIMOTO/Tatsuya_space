@@ -11,7 +11,7 @@ struct AddFolderView: View {
     
     @State private var folderName: String = ""
     
-    var navigationTitle: String {
+    private var navigationTitle: String {
         folderToEdit == nil ? "新しいフォルダ" : "フォルダ名を変更"
     }
 
@@ -19,7 +19,7 @@ struct AddFolderView: View {
         NavigationStack {
             Form {
                 Section(header: Text("フォルダ名")) {
-                    TextField("例：日常英会話", text: $folderName)
+                    TextField("例：TOEIC頻出単語", text: $folderName)
                 }
             }
             .navigationTitle(navigationTitle)

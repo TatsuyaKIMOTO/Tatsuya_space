@@ -22,10 +22,13 @@ final class Folder {
     }
 }
 
-// Cardモデルは変更なし
 @Model
 final class Card {
     var id: UUID
+    // ★★★ これが問題解決の核心です (1) ★★★
+    // 並び替えに使うための、作成日時プロパティを追加します。
+    var creationDate: Date
+    
     var frontText: String
     var backMeaning: String
     var backEtymology: String
@@ -35,6 +38,10 @@ final class Card {
 
     init(frontText: String, backMeaning: String, backEtymology: String, backExample: String, backExampleJP: String) {
         self.id = UUID()
+        // ★★★ これが問題解決の核心です (2) ★★★
+        // 新しいカードが作成される瞬間の日時を保存します。
+        self.creationDate = Date()
+        
         self.frontText = frontText
         self.backMeaning = backMeaning
         self.backEtymology = backEtymology

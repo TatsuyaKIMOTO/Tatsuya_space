@@ -14,7 +14,13 @@ struct CardEditView: View {
     @State private var backEtymology = ""
     @State private var backExample = ""
     @State private var backExampleJP = ""
-
+    
+    @FocusState private var focusedField: Field?
+    
+    enum Field: Hashable {
+        case front, meaning, etymology, example, exampleJP
+    }
+    
     var navigationTitle: String {
         cardToEdit == nil ? "新しいカード" : "カードを編集"
     }
@@ -22,62 +28,61 @@ struct CardEditView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section(header: Text("表面")) {
+                Section(header: Text("表面").textCase(.none).font(.subheadline)) {
                     TextField("単語", text: $frontText)
-                        .textFieldStyle(.roundedBorder)
+                        .focused($focusedField, equals: .front)
                 }
-                Section(header: Text("裏面")) {
-                    TextField("意味", text: $backMeaning, axis: .vertical)
-                        .textFieldStyle(.roundedBorder)
-                    TextField("語源（任意）", text: $backEtymology, axis: .vertical)
-                        .textFieldStyle(.roundedBorder)
-                    
-                    VStack(alignment: .leading) {
-                        Text("例文").font(.caption).foregroundColor(.gray)
-                        TextEditor(text: $backExample)
-                            .frame(height: 100)
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.5)))
-                            .padding(.vertical, 4)
+                
+                Section(header: Text("裏面").textCase(.none).font(.subheadline)) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("意味").font(.callout).fontWeight(.semibold).foregroundColor(.secondary)
+                        TextEditor(text: $backMeaning).frame(minHeight: 80).focused($focusedField, equals: .meaning)
                     }
-                    
-                    VStack(alignment: .leading) {
-                        Text("例文の日本語訳").font(.caption).foregroundColor(.gray)
-                        TextEditor(text: $backExampleJP)
-                            .frame(height: 100)
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.5)))
-                            .padding(.vertical, 4)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("語源（任意）").font(.callout).fontWeight(.semibold).foregroundColor(.secondary)
+                        TextEditor(text: $backEtymology).frame(minHeight: 80).focused($focusedField, equals: .etymology)
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("例文").font(.callout).fontWeight(.semibold).foregroundColor(.secondary)
+                        TextEditor(text: $backExample).frame(minHeight: 100).focused($focusedField, equals: .example)
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("例文の日本語訳").font(.callout).fontWeight(.semibold).foregroundColor(.secondary)
+                        TextEditor(text: $backExampleJP).frame(minHeight: 100).focused($focusedField, equals: .exampleJP)
                     }
                 }
             }
             .navigationTitle(navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("キャンセル") { dismiss() }
-                }
+                ToolbarItem(placement: .cancellationAction) { Button("キャンセル") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") {
-                        if save() {
-                            dismiss()
-                        }
+                        save()
+                        dismiss()
                     }
                     .disabled(frontText.isEmpty || backMeaning.isEmpty)
+                }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("完了") { focusedField = nil }
                 }
             }
             .onAppear(perform: loadCardData)
         }
     }
-
+    
     private func loadCardData() {
-        guard let card = cardToEdit else { return }
-        frontText = card.frontText
-        backMeaning = card.backMeaning
-        backEtymology = card.backEtymology
-        backExample = card.backExample
-        backExampleJP = card.backExampleJP
+        if let card = cardToEdit {
+            frontText = card.frontText
+            backMeaning = card.backMeaning
+            backEtymology = card.backEtymology
+            backExample = card.backExample
+            backExampleJP = card.backExampleJP
+        }
     }
 
-    private func save() -> Bool {
+    private func save() {
         if let card = cardToEdit {
             card.frontText = frontText
             card.backMeaning = backMeaning
@@ -85,6 +90,8 @@ struct CardEditView: View {
             card.backExample = backExample
             card.backExampleJP = backExampleJP
         } else {
+            // ★★★ これが問題解決の核心です (3) ★★★
+            // 新しいイニシャライザが自動的にcreationDateを設定します。
             let newCard = Card(
                 frontText: frontText,
                 backMeaning: backMeaning,
@@ -95,6 +102,5 @@ struct CardEditView: View {
             newCard.folder = folder
             modelContext.insert(newCard)
         }
-        return true
     }
 }
