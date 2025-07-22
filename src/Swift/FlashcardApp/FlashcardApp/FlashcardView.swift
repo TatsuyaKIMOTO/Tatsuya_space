@@ -8,6 +8,9 @@ struct FlashcardView: View {
     @State private var currentIndex = 0
     @State private var isFlipped = false
     
+    // スワイプ操作の状態を管理するための変数
+    @State private var offset: CGSize = .zero
+    
     init(cards: [Card]) {
         self.originalCards = cards
         _activeCards = State(initialValue: cards.shuffled())
@@ -32,6 +35,27 @@ struct FlashcardView: View {
                         LearningCardFace(card: activeCards[currentIndex], isFront: !isFlipped)
                     }
                     .rotation3DEffect(.degrees(isFlipped ? 180 : 0), axis: (x: 0, y: 1, z: 0))
+                    .offset(x: offset.width)
+                    .rotationEffect(.degrees(offset.width / 20.0))
+                    .gesture(
+                        DragGesture()
+                            .onChanged { gesture in
+                                offset = gesture.translation
+                            }
+                            .onEnded { gesture in
+                                if abs(gesture.translation.width) > 100 {
+                                    if gesture.translation.width > 0 {
+                                        showPreviousCard()
+                                    } else {
+                                        showNextCard()
+                                    }
+                                } else {
+                                    withAnimation(.spring) {
+                                        offset = .zero
+                                    }
+                                }
+                            }
+                    )
                     .onTapGesture {
                         withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) {
                             isFlipped.toggle()
@@ -68,37 +92,44 @@ struct FlashcardView: View {
         }
     }
     
+    // MARK: - Functions
+    
     func showNextCard() {
-        if currentIndex < activeCards.count - 1 {
+        guard currentIndex < activeCards.count - 1 else { return }
+        withAnimation(.spring) {
+            offset = CGSize(width: -500, height: 0)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             isFlipped = false
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
-                currentIndex += 1
-            }
+            currentIndex += 1
+            offset = .zero
         }
     }
 
     func showPreviousCard() {
-        if currentIndex > 0 {
+        guard currentIndex > 0 else { return }
+        withAnimation(.spring) {
+            offset = CGSize(width: 500, height: 0)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             isFlipped = false
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
-                currentIndex -= 1
-            }
+            currentIndex -= 1
+            offset = .zero
         }
     }
     
     func shuffleCards() {
         isFlipped = false
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.01) {
-            withAnimation {
-                activeCards.shuffle()
-                currentIndex = 0
-            }
+        withAnimation {
+            activeCards.shuffle()
+            currentIndex = 0
+            offset = .zero
         }
     }
 }
 
 
-// MARK: - Subviews
+// MARK: - Subviews (省略せずに完全に実装)
 
 private struct LearningCardFace: View {
     let card: Card
@@ -106,7 +137,6 @@ private struct LearningCardFace: View {
     
     var body: some View {
         ZStack {
-            // ★★★ CardListViewと共通の背景を使用します ★★★
             CardBackground()
 
             ScrollView {
@@ -177,9 +207,6 @@ private struct LearningInfoRow: View {
     }
 }
 
-// ★★★ ここが、この問題の唯一の、そして完全な解決策です ★★★
-// CardListView.swiftで定義したCardBackgroundを、このファイルにも追加します。
-// これにより、Cannot find 'CardBackground' in scopeエラーが解消されます。
 struct CardBackground: View {
     var body: some View {
         LinearGradient(
