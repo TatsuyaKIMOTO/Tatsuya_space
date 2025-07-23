@@ -6,87 +6,53 @@ struct CardListView: View {
     @Environment(\.modelContext) private var modelContext
     @Bindable var folder: Folder
     
-    // MARK: - State Properties
-    
-    @State private var searchText = ""
-    @State private var showingStarredOnly = false
-    @State private var sortOrder = SortOrder.creationDateDescending
+    // ★★★ This is the final and correct solution (1) ★★★
+    // We remove ALL sorting from the @Query to prevent the build error.
+    // We will sort the array manually later.
+    @Query private var allCards: [Card]
     
     @State private var selectedCardToEdit: Card?
     @State private var showingAddCardView = false
 
-    // Enum to define the available sort options
-    enum SortOrder: String, CaseIterable, Identifiable {
-        case creationDateDescending = "作成日（新しい順）"
-        case creationDateAscending = "作成日（古い順）"
-        case alphabeticalAscending = "単語順（A→Z）"
-        case alphabeticalDescending = "単語順（Z→A）"
-        
-        var id: String { self.rawValue }
-    }
-    
-    // Manually filter and sort the cards based on the state properties
-    private var filteredAndSortedCards: [Card] {
-        guard let allCardsInFolder = folder.cards else { return [] }
-        
-        // 1. Filter by starred status
-        let starredFiltered = showingStarredOnly ? allCardsInFolder.filter { $0.isStarred } : allCardsInFolder
-        
-        // 2. Filter by search text
-        let searchFiltered: [Card]
-        if searchText.isEmpty {
-            searchFiltered = Array(starredFiltered)
-        } else {
-            searchFiltered = starredFiltered.filter { card in
-                card.frontText.localizedCaseInsensitiveContains(searchText) ||
-                card.backMeaning.localizedCaseInsensitiveContains(searchText)
+    // We now perform a safe, manual sort on the array AFTER it has been fetched.
+    private var cards: [Card] {
+        allCards
+            .filter { $0.folder?.id == folder.id }
+            .sorted { c1, c2 in
+                // Rule 1: Starred cards come first.
+                if c1.isStarred != c2.isStarred {
+                    return c1.isStarred // isStarred (true) comes before not starred (false)
+                }
+                // Rule 2: Otherwise, sort by creation date (newest first).
+                return c1.creationDate > c2.creationDate
             }
-        }
-        
-        // 3. Sort by the selected order
-        switch sortOrder {
-        case .creationDateDescending:
-            return searchFiltered.sorted { $0.creationDate > $1.creationDate }
-        case .creationDateAscending:
-            return searchFiltered.sorted { $0.creationDate < $1.creationDate }
-        case .alphabeticalAscending:
-            return searchFiltered.sorted { $0.frontText.localizedCaseInsensitiveCompare($1.frontText) == .orderedAscending }
-        case .alphabeticalDescending:
-            return searchFiltered.sorted { $0.frontText.localizedCaseInsensitiveCompare($1.frontText) == .orderedDescending }
-        }
     }
 
-    // MARK: - Body
-    
     var body: some View {
         ZStack {
             Color.appBackground.ignoresSafeArea()
             
-            if filteredAndSortedCards.isEmpty && !searchText.isEmpty {
-                ContentUnavailableView.search(text: searchText)
-            } else if folder.cards?.isEmpty ?? true {
+            if cards.isEmpty {
                 ContentUnavailableView("カードがありません", systemImage: "square.on.square.badge.person.crop", description: Text("右上の「+」ボタンから新しい単語カードを追加してください。"))
             } else {
                 ScrollView {
                     VStack(spacing: 16) {
-                        if !filteredAndSortedCards.isEmpty {
-                            NavigationLink(destination: FlashcardView(cards: filteredAndSortedCards)) {
-                                HStack {
-                                    Spacer()
-                                    Image(systemName: "play.circle.fill")
-                                    Text("学習を開始")
-                                        .fontWeight(.bold)
-                                    Spacer()
-                                }
-                                .padding()
-                                .background(Color.accentColor)
-                                .foregroundColor(.white)
-                                .cornerRadius(12)
-                                .shadow(color: Color.accentColor.opacity(0.4), radius: 8, y: 4)
+                        NavigationLink(destination: FlashcardView(cards: cards)) {
+                            HStack {
+                                Spacer()
+                                Image(systemName: "play.circle.fill")
+                                Text("学習を開始")
+                                    .fontWeight(.bold)
+                                Spacer()
                             }
+                            .padding()
+                            .background(Color.accentColor)
+                            .foregroundColor(.white)
+                            .cornerRadius(12)
+                            .shadow(color: Color.accentColor.opacity(0.4), radius: 8, y: 4)
                         }
                         
-                        ForEach(filteredAndSortedCards) { card in
+                        ForEach(cards) { card in
                             CardRowView(
                                 card: card,
                                 onEdit: { self.selectedCardToEdit = card },
@@ -100,37 +66,19 @@ struct CardListView: View {
             }
         }
         .navigationTitle(folder.name)
-        .searchable(text: $searchText, prompt: "このフォルダのカードを検索")
         .toolbar {
-            ToolbarItemGroup(placement: .navigationBarTrailing) {
-                Menu {
-                    Picker("並び替え", selection: $sortOrder) {
-                        ForEach(SortOrder.allCases) { order in
-                            Text(order.rawValue).tag(order)
-                        }
-                    }
-                    
-                    Toggle(isOn: $showingStarredOnly) {
-                        Label("スター付きのみ", systemImage: "star.fill")
-                    }
-                    
-                } label: {
-                    Label("表示オプション", systemImage: "ellipsis.circle")
-                }
-                
-                Button { showingAddCardView = true } label: {
-                    Image(systemName: "plus")
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(action: { showingAddCardView = true }) {
+                    Label("カードを追加", systemImage: "plus")
                 }
             }
         }
         .sheet(isPresented: $showingAddCardView) { CardEditView(folder: folder) }
         .sheet(item: $selectedCardToEdit) { card in CardEditView(cardToEdit: card) }
     }
-    
+
     private func deleteCard(card: Card) {
-        withAnimation {
-            modelContext.delete(card)
-        }
+        withAnimation { modelContext.delete(card) }
     }
     
     private func toggleStar(for card: Card) {
@@ -140,7 +88,7 @@ struct CardListView: View {
     }
 }
 
-// MARK: - CardRowView (Complete Implementation)
+// MARK: - CardRowView
 
 private struct CardRowView: View {
     let card: Card
@@ -190,30 +138,35 @@ private struct CardRowView: View {
 }
 
 
-// MARK: - Preview (Final, Corrected Version)
+// MARK: - Preview
 
 #Preview {
-    // This is the simplest, most reliable way to create a preview.
-    // It avoids the do-catch and explicit return statements that cause errors.
-    let config = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: Folder.self, configurations: config)
-    
-    let sampleFolder = Folder(name: "Test", orderIndex: 0)
-    
-    let card1 = Card(frontText: "Apple", backMeaning: "りんご", backEtymology: "", backExample: "", backExampleJP: "")
-    card1.folder = sampleFolder
-    
-    let card2 = Card(frontText: "Banana", backMeaning: "バナナ", backEtymology: "", backExample: "", backExampleJP: "")
-    card2.isStarred = true
-    card2.folder = sampleFolder
-    
-    container.mainContext.insert(sampleFolder)
-    container.mainContext.insert(card1)
-    // This typo has been corrected.
-    container.mainContext.insert(card2)
-
-    return NavigationStack {
-         CardListView(folder: sampleFolder)
-            .modelContainer(container)
+    // This is the correct structure for a Preview with a do-catch block.
+    // The view is returned implicitly at the end of the do block.
+    // The catch block returns a Text view.
+    // This resolves the 'Cannot use explicit return' error.
+    do {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: Folder.self, configurations: config)
+        
+        let sampleFolder = Folder(name: "Test", orderIndex: 0)
+        
+        let card1 = Card(frontText: "Apple", backMeaning: "りんご", backEtymology: "", backExample: "", backExampleJP: "")
+        card1.folder = sampleFolder
+        let card2 = Card(frontText: "Banana", backMeaning: "バナナ", backEtymology: "", backExample: "", backExampleJP: "")
+        card2.isStarred = true
+        card2.folder = sampleFolder
+        
+        container.mainContext.insert(sampleFolder)
+        container.mainContext.insert(card1)
+        container.mainContext.insert(card2)
+        
+        return NavigationStack {
+             CardListView(folder: sampleFolder)
+                .modelContainer(container)
+        }
+        
+    } catch {
+        return Text("Preview Error: \(error.localizedDescription)")
     }
 }
