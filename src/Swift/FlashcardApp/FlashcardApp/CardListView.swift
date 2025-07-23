@@ -6,15 +6,20 @@ struct CardListView: View {
     @Environment(\.modelContext) private var modelContext
     @Bindable var folder: Folder
     
-    // @Queryは、新しく作成したcreationDateで、降順（新しいものが先）にソートします。
     @Query(sort: \Card.creationDate, order: .reverse) private var allCards: [Card]
     
     @State private var selectedCardToEdit: Card?
     @State private var showingAddCardView = false
 
-    // 取得した全てのカードの中から、このフォルダに属するものだけを抽出します。
     private var cards: [Card] {
-        allCards.filter { $0.folder?.id == folder.id }
+        allCards
+            .filter { $0.folder?.id == folder.id }
+            .sorted { card1, card2 in
+                if card1.isStarred != card2.isStarred {
+                    return card1.isStarred
+                }
+                return card1.creationDate > card2.creationDate
+            }
     }
 
     var body: some View {
@@ -45,6 +50,7 @@ struct CardListView: View {
                             CardRowView(
                                 card: card,
                                 onEdit: { self.selectedCardToEdit = card },
+                                onStar: { self.toggleStar(for: card) },
                                 onDelete: { self.deleteCard(card: card) }
                             )
                         }
@@ -71,25 +77,29 @@ struct CardListView: View {
     }
 
     private func deleteCard(card: Card) {
+        withAnimation { modelContext.delete(card) }
+    }
+    
+    private func toggleStar(for card: Card) {
         withAnimation {
-            modelContext.delete(card)
+            card.isStarred.toggle()
         }
     }
 }
 
 
-// MARK: - CardRowView (省略せずに完全に実装)
+// MARK: - CardRowView
 
 private struct CardRowView: View {
     let card: Card
     let onEdit: () -> Void
+    let onStar: () -> Void
     let onDelete: () -> Void
     
     var body: some View {
         Button(action: onEdit) {
             HStack(spacing: 0) {
-                Color.accentColor
-                    .frame(width: 5)
+                Color.accentColor.frame(width: 5)
                 
                 VStack(alignment: .leading, spacing: 8) {
                     Text(card.frontText)
@@ -103,24 +113,26 @@ private struct CardRowView: View {
                 }
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .leading)
+                
+                Button(action: onStar) {
+                    Image(systemName: card.isStarred ? "star.fill" : "star")
+                        .font(.title2)
+                        .foregroundColor(card.isStarred ? .yellow : .gray.opacity(0.5))
+                        .padding()
+                }
+                .buttonStyle(.borderless)
             }
             .background(Color.elementBackground)
             .cornerRadius(12)
-            .shadow(
-                color: .black.opacity(0.15),
-                radius: 8,
-                x: 0,
-                y: 4
-            )
+            .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4)
         }
         .buttonStyle(.plain)
         .contextMenu {
-            Button(action: onEdit) {
-                Label("編集", systemImage: "pencil")
+            Button(action: onStar) {
+                Label(card.isStarred ? "スターを外す" : "スターを付ける", systemImage: card.isStarred ? "star.slash.fill" : "star.fill")
             }
-            Button(role: .destructive, action: onDelete) {
-                Label("削除", systemImage: "trash")
-            }
+            Button(action: onEdit) { Label("編集", systemImage: "pencil") }
+            Button(role: .destructive, action: onDelete) { Label("削除", systemImage: "trash") }
         }
     }
 }
@@ -141,15 +153,16 @@ private struct CardRowView: View {
         let card1 = Card(frontText: "Apple", backMeaning: "りんご", backEtymology: "", backExample: "", backExampleJP: "")
         card1.folder = sampleFolder
         let card2 = Card(frontText: "Banana", backMeaning: "バナナ", backEtymology: "", backExample: "", backExampleJP: "")
+        card2.isStarred = true
         card2.folder = sampleFolder
         
         container.mainContext.insert(sampleFolder)
         container.mainContext.insert(card1)
         container.mainContext.insert(card2)
         
-        // NavigationStackをdoブロックの中に含めます
+        // returnを削除し、NavigationStackをdoブロックの中に含めます
         return NavigationStack {
-            CardListView(folder: sampleFolder)
+             CardListView(folder: sampleFolder)
                 .modelContainer(container)
         }
         
