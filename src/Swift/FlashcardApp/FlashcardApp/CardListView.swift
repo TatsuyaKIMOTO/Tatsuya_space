@@ -69,19 +69,21 @@ struct CardListView: View {
             } else {
                 ScrollView {
                     VStack(spacing: 16) {
-                        NavigationLink(destination: FlashcardView(cards: filteredAndSortedCards)) {
-                            HStack {
-                                Spacer()
-                                Image(systemName: "play.circle.fill")
-                                Text("学習を開始")
-                                    .fontWeight(.bold)
-                                Spacer()
+                        if !filteredAndSortedCards.isEmpty {
+                            NavigationLink(destination: FlashcardView(cards: filteredAndSortedCards)) {
+                                HStack {
+                                    Spacer()
+                                    Image(systemName: "play.circle.fill")
+                                    Text("学習を開始")
+                                        .fontWeight(.bold)
+                                    Spacer()
+                                }
+                                .padding()
+                                .background(Color.accentColor)
+                                .foregroundColor(.white)
+                                .cornerRadius(12)
+                                .shadow(color: Color.accentColor.opacity(0.4), radius: 8, y: 4)
                             }
-                            .padding()
-                            .background(Color.accentColor)
-                            .foregroundColor(.white)
-                            .cornerRadius(12)
-                            .shadow(color: Color.accentColor.opacity(0.4), radius: 8, y: 4)
                         }
                         
                         ForEach(filteredAndSortedCards) { card in
@@ -200,16 +202,18 @@ private struct CardRowView: View {
     
     let card1 = Card(frontText: "Apple", backMeaning: "りんご", backEtymology: "", backExample: "", backExampleJP: "")
     card1.folder = sampleFolder
+    
     let card2 = Card(frontText: "Banana", backMeaning: "バナナ", backEtymology: "", backExample: "", backExampleJP: "")
     card2.isStarred = true
     card2.folder = sampleFolder
     
     container.mainContext.insert(sampleFolder)
     container.mainContext.insert(card1)
+    // This typo has been corrected.
     container.mainContext.insert(card2)
-    
+
     return NavigationStack {
-        CardListView(folder: sampleFolder)
+         CardListView(folder: sampleFolder)
             .modelContainer(container)
     }
 }
