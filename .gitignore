@@ -1,5 +1,5 @@
 .DS_Store
-Thums.db*.xcuserstate
+Thums.db
+*.xcuserstate
 */xcuserdata/
 */xcdebugger/
-
