@@ -1,4 +1,3 @@
-// FlashcardView.swift
 import SwiftUI
 
 struct FlashcardView: View {
@@ -8,7 +7,6 @@ struct FlashcardView: View {
     @State private var currentIndex = 0
     @State private var isFlipped = false
     
-    // スワイプ操作の状態を管理するための変数
     @State private var offset: CGSize = .zero
     
     init(cards: [Card]) {
@@ -37,36 +35,29 @@ struct FlashcardView: View {
                     .rotation3DEffect(.degrees(isFlipped ? 180 : 0), axis: (x: 0, y: 1, z: 0))
                     .offset(x: offset.width)
                     .rotationEffect(.degrees(offset.width / 20.0))
-                    // ★★★ ここからが、この問題の唯一の、そして完全な解決策です ★★★
                     .gesture(
                         DragGesture()
                             .onChanged { gesture in
                                 let translationX = gesture.translation.width
                                 
-                                // 【抵抗】進めない方向へのスワイプには「抵抗」を適用
                                 if (currentIndex == 0 && translationX > 0) || (currentIndex == activeCards.count - 1 && translationX < 0) {
-                                    // 指の動きの5分の1しか動かないようにして、抵抗感を表現
                                     offset = CGSize(width: translationX / 5.0, height: 0)
                                 } else {
-                                    // 通常のスワイプ
                                     offset = gesture.translation
                                 }
                             }
                             .onEnded { gesture in
-                                // スワイプが一定距離を超えた場合のみ、カードを遷移
                                 if gesture.translation.width < -100 {
                                     showNextCard()
                                 } else if gesture.translation.width > 100 {
                                     showPreviousCard()
                                 } else {
-                                    // 【復元】距離が不十分な場合は、バネのように元の位置に戻す
                                     withAnimation(.spring) {
                                         offset = .zero
                                     }
                                 }
                             }
                     )
-                    // ★★★ ここまで ★★★
                     .onTapGesture {
                         withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) {
                             isFlipped.toggle()
@@ -107,7 +98,6 @@ struct FlashcardView: View {
     
     func showNextCard() {
         guard currentIndex < activeCards.count - 1 else {
-            // これ以上進めない場合は、カードを元の位置に優しく戻す
             withAnimation(.spring) {
                 offset = .zero
             }
@@ -115,21 +105,18 @@ struct FlashcardView: View {
         }
         
         withAnimation(.spring) {
-            // カードを画面外へ飛ばすアニメーション
             offset = CGSize(width: -500, height: 0)
         }
         
-        // アニメーションの後に状態をリセットし、次のカードへ
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             isFlipped = false
             currentIndex += 1
-            offset = .zero // アニメーションなしでオフセットをリセット
+            offset = .zero
         }
     }
 
     func showPreviousCard() {
         guard currentIndex > 0 else {
-            // これ以上戻れない場合は、カードを元の位置に優しく戻す
             withAnimation(.spring) {
                 offset = .zero
             }
@@ -143,13 +130,12 @@ struct FlashcardView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             isFlipped = false
             currentIndex -= 1
-            offset = .zero // アニメーションなしでオフセットをリセット
+            offset = .zero
         }
     }
     
     func shuffleCards() {
         isFlipped = false
-        // currentIndexをリセットしてからシャッフルする
         currentIndex = 0
         withAnimation {
             activeCards.shuffle()
@@ -159,7 +145,7 @@ struct FlashcardView: View {
 }
 
 
-// MARK: - Subviews (変更なし)
+// MARK: - Subviews
 
 private struct LearningCardFace: View {
     let card: Card
@@ -226,8 +212,13 @@ private struct LearningInfoRow: View {
                 .fontWeight(.bold)
                 .foregroundColor(.white.opacity(0.8))
             
+            // ★★★★★★★★★★★★★★★★★★★★ 修正点 ★★★★★★★★★★★★★★★★★★★★
+            // カード裏面のコンテンツを表示するTextビューです。
+            // フォントサイズを60から28に大幅に縮小し、文字の太さを.boldから
+            // .semiboldに少し細くすることで、読みやすさを向上させました。
+            // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
             Text(content)
-                .font(.system(size: 50, weight: .bold, design: .rounded))
+                .font(.system(size: 28, weight: .semibold, design: .rounded)) // ← サイズと太さを変更
                 .foregroundColor(.white)
                 .lineLimit(nil)
                 .fixedSize(horizontal: false, vertical: true)
