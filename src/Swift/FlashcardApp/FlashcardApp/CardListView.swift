@@ -5,9 +5,9 @@ struct CardListView: View {
     let folder: Folder
     @Environment(\.modelContext) private var modelContext
 
-    // すべてのカードを取得
     @Query var cards: [Card]
 
+    // このsearchTextを更新するTextFieldを自前で用意します
     @State private var searchText = ""
     @State private var showingStarredOnly = false
     @State private var sortOrder = SortOrder.creationDateDescending
@@ -23,12 +23,10 @@ struct CardListView: View {
         var id: String { self.rawValue }
     }
 
-    // フォルダ内のカードだけ抽出
     private var cardsInFolder: [Card] {
         cards.filter { $0.folder == folder }
     }
 
-    // 検索・スター・並び替え処理
     private var filteredAndSortedCards: [Card] {
         let starredFiltered = showingStarredOnly ? cardsInFolder.filter { $0.isStarred } : cardsInFolder
         let searchFiltered: [Card]
@@ -53,47 +51,73 @@ struct CardListView: View {
     }
 
     var body: some View {
-        ZStack {
-            Color.appBackground.ignoresSafeArea()
-            if filteredAndSortedCards.isEmpty && !searchText.isEmpty {
-                ContentUnavailableView.search(text: searchText)
-            } else if cardsInFolder.isEmpty {
-                ContentUnavailableView("カードがありません", systemImage: "square.on.square.badge.person.crop", description: Text("右上の「+」ボタンから新しい単語カードを追加できます"))
-            } else {
-                ScrollView {
-                    VStack(spacing: 16) {
-                        if !filteredAndSortedCards.isEmpty {
-                            NavigationLink(destination: FlashcardView(cards: filteredAndSortedCards)) {
-                                HStack {
-                                    Spacer()
-                                    Image(systemName: "play.circle.fill")
-                                    Text("学習を開始")
-                                        .fontWeight(.bold)
-                                    Spacer()
-                                }
-                                .padding()
-                                .background(Color.accentColor)
-                                .foregroundColor(.white)
-                                .cornerRadius(12)
-                                .shadow(color: Color.accentColor.opacity(0.4), radius: 8, y: 4)
-                            }
-                        }
+        VStack(spacing: 0) { // spacingを0に
+            // ★★★★★ カスタム検索バーの実装 ★★★★★
+            HStack {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(.secondary)
+                TextField("このフォルダのカードを検索", text: $searchText)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                if !searchText.isEmpty {
+                    Button {
+                        searchText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            .padding(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
+            .background(Color(.systemGray6))
+            .cornerRadius(10)
+            .padding()
+            // ★★★★★★★★★★★★★★★★★★★★★★★★
 
-                        ForEach(filteredAndSortedCards) { card in
-                            CardRowView(
-                                card: card,
-                                onEdit: { self.selectedCardToEdit = card },
-                                onStar: { self.toggleStar(for: card) },
-                                onDelete: { self.deleteCard(card: card) }
-                            )
+            ScrollView {
+                // if/elseの代わりにVStackとopacityを使ってみます
+                VStack(spacing: 16) {
+                    if !filteredAndSortedCards.isEmpty {
+                        NavigationLink(destination: FlashcardView(cards: filteredAndSortedCards)) {
+                            HStack {
+                                Spacer()
+                                Image(systemName: "play.circle.fill")
+                                Text("学習を開始")
+                                    .fontWeight(.bold)
+                                Spacer()
+                            }
+                            .padding()
+                            .background(Color.accentColor)
+                            .foregroundColor(.white)
+                            .cornerRadius(12)
+                            .shadow(color: Color.accentColor.opacity(0.4), radius: 8, y: 4)
                         }
                     }
-                    .padding()
+
+                    ForEach(filteredAndSortedCards) { card in
+                        CardRowView(
+                            card: card,
+                            onEdit: { self.selectedCardToEdit = card },
+                            onStar: { self.toggleStar(for: card) },
+                            onDelete: { self.deleteCard(card: card) }
+                        )
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.bottom)
+            }
+            .background(Color.appBackground.ignoresSafeArea())
+            .overlay {
+                if filteredAndSortedCards.isEmpty && !searchText.isEmpty {
+                    ContentUnavailableView.search(text: searchText)
+                } else if cardsInFolder.isEmpty {
+                    ContentUnavailableView("カードがありません", systemImage: "square.on.square.badge.person.crop", description: Text("右上の「+」ボタンから新しい単語カードを追加できます"))
                 }
             }
         }
         .navigationTitle(folder.name)
-        .searchable(text: $searchText, prompt: "このフォルダのカードを検索")
+        .navigationBarTitleDisplayMode(.inline)
+        // .searchable はバグを踏むため、完全に削除します
         .toolbar {
             ToolbarItemGroup(placement: .navigationBarTrailing) {
                 Menu {
@@ -115,6 +139,10 @@ struct CardListView: View {
         }
         .sheet(isPresented: $showingAddCardView) { CardEditView(folder: folder) }
         .sheet(item: $selectedCardToEdit) { card in CardEditView(cardToEdit: card) }
+        .onTapGesture {
+            // 背景をタップしたらキーボードを閉じる
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        }
     }
 
     private func deleteCard(card: Card) {
@@ -130,7 +158,7 @@ struct CardListView: View {
     }
 }
 
-// MARK: - CardRowView
+// (CardRowView と Preview は変更ありません)
 
 private struct CardRowView: View {
     let card: Card
@@ -175,8 +203,6 @@ private struct CardRowView: View {
         }
     }
 }
-
-// MARK: - Preview
 
 #Preview {
     let config = ModelConfiguration(isStoredInMemoryOnly: true)

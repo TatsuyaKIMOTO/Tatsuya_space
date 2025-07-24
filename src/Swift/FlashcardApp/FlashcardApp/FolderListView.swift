@@ -7,29 +7,24 @@ import SwiftData
 struct FolderListView: View {
     @Environment(\.modelContext) private var modelContext
     
-    // ★★★ This is the final and correct solution. ★★★
-    // We remove ALL sorting from the @Query macro to prevent compiler errors.
     @Query private var folders: [Folder]
     
     @State private var showingAddSheet = false
     @State private var folderToEdit: Folder?
     @State private var searchText = ""
 
-    // We now perform a safe, manual sort on the array AFTER it has been fetched.
     private var sortedFolders: [Folder] {
         folders.sorted { f1, f2 in
             if f1.isPinned != f2.isPinned {
-                return f1.isPinned // Pinned (true) comes first
+                return f1.isPinned
             } else {
-                return f1.orderIndex < f2.orderIndex // Then sort by orderIndex
+                return f1.orderIndex < f2.orderIndex
             }
         }
     }
 
-    // A separate query for cards for the search functionality.
     @Query(sort: \Card.creationDate, order: .reverse) private var allCards: [Card]
     
-    // Computed property for card search results.
     private var cardSearchResults: [Card] {
         if searchText.isEmpty {
             return []
@@ -45,15 +40,19 @@ struct FolderListView: View {
             ZStack {
                 Color.appBackground.ignoresSafeArea()
                 
-                // If a search is active, show the card results list.
                 if !searchText.isEmpty {
                     cardSearchResultsView
                 } else {
-                    // If no search is active, show the folder list.
                     folderListView
                 }
             }
             .navigationTitle("マイフォルダ")
+            // ★★★ 修正点 1 ★★★
+            // NavigationStackに対して、どのようなデータ型(ここではFolder)が渡されたら
+            // どのビュー(CardListView)に遷移するかのルールを定義します。
+            .navigationDestination(for: Folder.self) { folder in
+                CardListView(folder: folder)
+            }
             .toolbar { toolbarItems() }
             .sheet(isPresented: $showingAddSheet) { AddFolderView(currentFolderCount: folders.count) }
             .sheet(item: $folderToEdit) { folder in AddFolderView(folderToEdit: folder) }
@@ -93,9 +92,11 @@ struct FolderListView: View {
         } else {
             List {
                 ForEach(cardSearchResults) { card in
-                    // Navigate to the CardListView for the card's folder
                     if let folder = card.folder {
-                        NavigationLink(destination: CardListView(folder: folder)) {
+                        // ★★★ 修正点 2 ★★★
+                        // 遷移先のビューを直接指定する destination: ではなく、
+                        // 遷移のトリガーとなるデータ(folder)を value: で渡します。
+                        NavigationLink(value: folder) {
                             CardSearchResultRow(card: card)
                         }
                     }
@@ -185,7 +186,9 @@ private struct FolderRow: View {
     }
     
     private var normalModeView: some View {
-        NavigationLink(destination: CardListView(folder: folder)) {
+        // ★★★ 修正点 3 ★★★
+        // こちらの NavigationLink も同様に value: を使う形式に変更します。
+        NavigationLink(value: folder) {
             HStack(spacing: 15) {
                 Image(systemName: "folder.fill").font(.title).foregroundColor(.accent)
                 VStack(alignment: .leading) {
